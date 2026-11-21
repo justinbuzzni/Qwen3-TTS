@@ -466,6 +466,42 @@ The CLI starts one worker with one active inference at a time. A busy model retu
 
 Run the server tests with `pip install -e '.[server,test]'` and `python -m pytest tests`.
 
+#### Keep the FastAPI server running
+
+For a workspace session, run the server under the included supervisor. It logs the child PID and exit status, then restarts the server after five seconds. A stop signal to the supervisor shuts down the current server.
+
+```bash
+bash scripts/run-tts-supervised.sh /path/to/venv/bin/qwen-tts-server --device cpu --cpu-threads 8
+```
+
+For a server that must survive the workspace closing, run it under systemd on the host.
+
+For the workspace's existing CPU deployment on port 8765, run `bash scripts/install-tts-host-service.sh` from a host terminal with `uv` and user systemd available. Stop any workspace server using port 8765 before running it. The script copies the cached model and existing API key, installs the application outside the worktree, and enables `qwen3-tts-8765.service`. Its logs are available through `journalctl --user -u qwen3-tts-8765.service`.
+
+For a manual installation, save the following as `~/.config/systemd/user/qwen-tts.service` and replace the virtual environment and model paths with persistent host paths. Set `QWEN_TTS_API_KEY` in `~/.config/qwen-tts/server.env` with file permissions `0600` for the non-loopback binding in this example.
+
+```ini
+[Unit]
+Description=Qwen3-TTS FastAPI server
+
+[Service]
+EnvironmentFile=%h/.config/qwen-tts/server.env
+ExecStart=/path/to/venv/bin/qwen-tts-server --model /path/to/model --device cpu --cpu-threads 8 --host 0.0.0.0 --port 8765
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now qwen-tts.service
+journalctl --user -u qwen-tts.service -f
+```
+
+If the host stops user services at logout, enable lingering for the service account through the host administrator.
+
 ### DashScope API Usage
 
 To further explore Qwen3-TTS, we encourage you to try our DashScope API for a faster and more efficient experience. For detailed API information and documentation, please refer to the following:
