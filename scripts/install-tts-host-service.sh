@@ -3,23 +3,58 @@ set -euo pipefail
 umask 077
 
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-runtime="$root/.aplus"
 data="$HOME/.local/share/qwen3-tts-8765"
 unit_dir="$HOME/.config/systemd/user"
 unit=qwen3-tts-8765.service
 
-# Check host access before spending time on dependencies or copying weights.
-if ! systemctl --user show-environment >/dev/null; then
-    printf 'Run this script in a terminal on the host with access to the user systemd manager.\n' >&2
-    exit 1
+if [[ ${1:-} == --help && $# == 1 ]]; then
+    printf 'Usage: %s [--runtime-dir /path/to/worktree/.aplus]\n' "$0"
+    exit 0
+fi
+if [[ $# == 2 && $1 == --runtime-dir ]]; then
+    runtime=$2
+elif (( $# == 0 )); then
+    runtime="$root/.aplus"
+    if [[ ! -s $runtime/qwen-tts-model.log || ! -s $runtime/qwen-tts-api-key ]]; then
+        candidates=()
+        for candidate in "$runtime"/worktrees/*/*/.aplus; do
+            if [[ -s $candidate/qwen-tts-model.log && -s $candidate/qwen-tts-api-key ]]; then
+                candidates+=("$candidate")
+            fi
+        done
+        case ${#candidates[@]} in
+            0) ;;
+            1) runtime=${candidates[0]} ;;
+            *)
+                printf 'More than one worktree contains TTS runtime files. Select one with --runtime-dir:\n' >&2
+                printf '  %s\n' "${candidates[@]}" >&2
+                exit 1
+                ;;
+        esac
+    fi
+else
+    printf 'Usage: %s [--runtime-dir /path/to/worktree/.aplus]\n' "$0" >&2
+    exit 2
 fi
 
+if [[ ! -s $runtime/qwen-tts-model.log || ! -s $runtime/qwen-tts-api-key ]]; then
+    printf 'TTS runtime files are missing in %s. Use --runtime-dir with the .aplus directory where TTS originally ran.\n' "$runtime" >&2
+    exit 1
+fi
 model=$(tail -n 1 "$runtime/qwen-tts-model.log")
-test -s "$model/model.safetensors"
-test -s "$model/speech_tokenizer/model.safetensors"
+if [[ ! -s $model/model.safetensors || ! -s $model/speech_tokenizer/model.safetensors ]]; then
+    printf 'The model cache recorded in %s/qwen-tts-model.log is incomplete or has moved.\n' "$runtime" >&2
+    exit 1
+fi
 key=$(<"$runtime/qwen-tts-api-key")
 if [[ ! $key =~ ^[A-Za-z0-9_-]+$ ]]; then
     printf 'Expected the workspace API key in %s/qwen-tts-api-key.\n' "$runtime" >&2
+    exit 1
+fi
+
+# Check host access before spending time on dependencies or copying weights.
+if ! systemctl --user show-environment >/dev/null; then
+    printf 'Run this script in a terminal on the host with access to the user systemd manager.\n' >&2
     exit 1
 fi
 

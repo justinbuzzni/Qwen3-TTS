@@ -476,7 +476,9 @@ bash scripts/run-tts-supervised.sh /path/to/venv/bin/qwen-tts-server --device cp
 
 For a server that must survive the workspace closing, run it under systemd on the host.
 
-For the workspace's existing CPU deployment on port 8765, run `bash scripts/install-tts-host-service.sh` from a host terminal with `uv` and user systemd available. Stop any workspace server using port 8765 before running it. The script copies the cached model and existing API key, installs the application outside the worktree, and enables `qwen3-tts-8765.service`. Its logs are available through `journalctl --user -u qwen3-tts-8765.service`.
+For the workspace's existing CPU deployment on port 8765, run `./scripts/install-tts-host-service.sh` from a host terminal with `uv` and user systemd available. Stop any workspace server using port 8765 before running it. The installer uses the TTS runtime files in the current checkout's `.aplus` directory or in a single matching workspace worktree. To select a worktree explicitly, run `./scripts/install-tts-host-service.sh --runtime-dir /path/to/worktree/.aplus`.
+
+The script copies the cached model and existing API key, installs the application outside the checkout, and enables `qwen3-tts-8765.service`. Its logs are available through `journalctl --user -u qwen3-tts-8765.service`.
 
 For a manual installation, save the following as `~/.config/systemd/user/qwen-tts.service` and replace the virtual environment and model paths with persistent host paths. Set `QWEN_TTS_API_KEY` in `~/.config/qwen-tts/server.env` with file permissions `0600` for the non-loopback binding in this example.
 
