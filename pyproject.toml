@@ -31,12 +31,24 @@ dependencies = [
   "einops",
 ]
 
+[project.optional-dependencies]
+server = [
+  "fastapi>=0.115.12",
+  "uvicorn>=0.34",
+  "python-multipart>=0.0.22",
+]
+test = [
+  "httpx>=0.27",
+  "pytest>=8",
+]
+
 [project.urls]
 Homepage = "https://github.com/Qwen/Qwen3-TTS"
 Repository = "https://github.com/Qwen/Qwen3-TTS"
 
 [project.scripts]
 qwen-tts-demo = "qwen_tts.cli.demo:main"
+qwen-tts-server = "qwen_tts.server:main"
 
 [tool.setuptools]
 packages = { find = { where = ["."] , include = ["qwen_tts*"] } }

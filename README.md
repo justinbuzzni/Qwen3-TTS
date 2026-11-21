@@ -34,6 +34,7 @@ We release **Qwen3-TTS**, a series of powerful speech generation capabilities de
     - [Voice Design then Clone](#voice-design-then-clone)
     - [Tokenizer Encode and Decode](#tokenizer-encode-and-decode)
   - [Launch Local Web UI Demo](#launch-local-web-ui-demo)
+  - [Run the FastAPI Server](#run-the-fastapi-server)
   - [DashScope API Usage](#dashscope-api-usage)
 - [vLLM Usage](#vllm-usage)
 - [Fine Tuning](#fine-tuning)
@@ -417,6 +418,53 @@ qwen-tts-demo Qwen/Qwen3-TTS-12Hz-1.7B-Base \
 ```
 
 And open `https://<your-ip>:8000` to experience it. If your browser shows a warning, it’s expected for self-signed certificates. For production, use a real certificate.
+
+### Run the FastAPI Server
+
+Install from this repository and start the server in the same Python environment.
+
+```bash
+pip install -e '.[server]'
+qwen-tts-server
+```
+
+The default server listens on `127.0.0.1:8000` and loads `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice`. The first launch downloads model weights. After startup, open [Swagger UI](http://127.0.0.1:8000/docs) to send requests and download WAV files. Use `GET /healthz` to check startup and `GET /v1/voices` to see the loaded model's supported languages and speakers.
+
+```bash
+curl --fail-with-body http://127.0.0.1:8000/v1/tts/speech \
+  -H 'Content-Type: application/json' \
+  --data '{"text":"안녕하세요. 큐웬 음성 합성 서버입니다.","language":"korean","speaker":"sohee"}' \
+  --output speech.wav
+```
+
+Restart the server with the model for the mode you want to use.
+
+| Mode | `--model` value | API |
+| --- | --- | --- |
+| CustomVoice | `Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice` or `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` | `POST /v1/tts/speech` with `text`, optional `language` and `speaker`, and optional `instruct` on the 1.7B model |
+| VoiceDesign | `Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign` | `POST /v1/tts/speech` with `text`, `instruct`, and optional `language` |
+| Voice clone | `Qwen/Qwen3-TTS-12Hz-0.6B-Base` or `Qwen/Qwen3-TTS-12Hz-1.7B-Base` | `POST /v1/tts/voice-clone` with multipart fields `text`, `ref_audio`, optional `language`, and either `ref_text` or `x_vector_only_mode=true` |
+
+```bash
+qwen-tts-server --model Qwen/Qwen3-TTS-12Hz-0.6B-Base
+```
+
+```bash
+curl --fail-with-body http://127.0.0.1:8000/v1/tts/voice-clone \
+  --form 'text=새로운 문장을 읽습니다.' \
+  --form 'language=korean' \
+  --form 'ref_audio=@speech.wav' \
+  --form 'ref_text=안녕하세요. 큐웬 음성 합성 서버입니다.' \
+  --output clone.wav
+```
+
+The language defaults to `auto`. On CustomVoice, omitting `speaker` selects the default reported by `GET /v1/voices`. Each request returns a complete PCM 16-bit WAV. Requests accept up to 500 characters of synthesis text. Split longer passages into shorter segments. The server caps generation at 512 audio tokens. Reference files must be WAV, FLAC, or OGG, with one or two channels, an 8–96 kHz sample rate, and a duration of 1–30 seconds. The total multipart request limit is 8 MiB. Larger file parts within that limit can spool temporarily and are cleaned up at request end.
+
+`--device auto` uses CUDA when available and CPU otherwise. CUDA with native BF16 support uses BF16 in auto mode. Other devices use FP32. For CPU execution, try `qwen-tts-server --device cpu --cpu-threads 8`. See `qwen-tts-server --help` for precision and attention options. For offline use, pass a complete, downloaded model directory to `--model`.
+
+The CLI starts one worker with one active inference at a time. A busy model returns HTTP 503 with `Retry-After`. If a request disconnects after generation starts, the slot stays occupied until generation finishes. Set `QWEN_TTS_API_KEY` before binding outside loopback, and use a TLS reverse proxy for remote clients. When the key is set, send it as an `Authorization: Bearer` header on `/v1` requests or enter it with Swagger UI's **Authorize** button. Health and documentation routes are public.
+
+Run the server tests with `pip install -e '.[server,test]'` and `python -m pytest tests`.
 
 ### DashScope API Usage
 
